@@ -71,7 +71,7 @@ class ThreeId {
     const spaces = Object.keys(this._keyrings)
     const subDIDs = await Promise.all(
       spaces.map(space => {
-        return this._init3ID(space, cid)
+        return this._init3ID(space)
       })
     )
     this._subDIDs = {}
@@ -81,7 +81,7 @@ class ThreeId {
     await muportPromise
   }
 
-  async _init3ID (spaceName, rootCid) {
+  async _init3ID (spaceName) {
     const doc = new DidDocument(this._ipfs, DID_METHOD_NAME)
     if (!spaceName) {
       const pubkeys = this._mainKeyring.getPublicKeys()
@@ -95,8 +95,15 @@ class ThreeId {
       doc.addPublicKey('subEncryptionKey', 'Curve25519EncryptionPublicKey', 'publicKeyBase64', pubkeys.asymEncryptionKey)
       doc.addAuthentication('Secp256k1SignatureAuthentication2018', 'subSigningKey')
       doc.addCustomProperty('space', spaceName)
-      doc.addCustomProperty('root', rootCid)
-      //doc.addCustomProperty('proof', theProof)
+      doc.addCustomProperty('root', this.DID)
+      const payload = {
+        subSigningKey: pubkeys.signingKey,
+        subEncryptionKey: pubkeys.asymEncryptionKey,
+        space: spaceName,
+        iat: null
+      }
+      const signature = (await this.signJWT(payload)).split('.')[2]
+      doc.addCustomProperty('proof', { alg: 'ES256K', signature })
     }
     const cid = await doc.commit({ noTimestamp: true })
     return {
@@ -135,7 +142,7 @@ class ThreeId {
       const entropy = '0x' + utils.sha256(sig.slice(2))
       const seed = HDNode.mnemonicToSeed(HDNode.entropyToMnemonic(entropy))
       this._keyrings[name] = new Keyring(seed)
-      this._subDIDs[name] = (await this._init3ID(name, this._rootDID)).did
+      this._subDIDs[name] = (await this._init3ID(name)).did
       localstorage.set(STORAGE_KEY + this.managementAddress, this.serializeState())
       return true
     } else {
